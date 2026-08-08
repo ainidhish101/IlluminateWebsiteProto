@@ -1,0 +1,24 @@
+.DS_Store
+.env
+/node_modules/
+
+# React Router
+/.react-router/
+/build/
+
+# Cloudflare / Wrangler
+# .dev.vars holds local secrets the same way .env does — never commit it.
+# .wrangler/ is local runtime state (caches, simulated storage).
+.dev.vars
+.dev.vars.*
+/.wrangler/
+
+# Local AI coding-tool state — machine-specific, not part of the site.
+/.agents/
+/.codex/
+/.impeccable/
+.claude/settings.local.json
+
+# Test artifacts from exercising the GPA tool's export feature locally.
+/illuminate-transcript.csv
+/illuminate-transcript.pdf

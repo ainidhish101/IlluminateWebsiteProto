@@ -1,0 +1,38 @@
+{
+  "name": "",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "react-router build",
+    "dev": "react-router dev",
+    "start": "react-router-serve ./build/server/index.js",
+    "preview": "npm run build && wrangler dev -c build/server/wrangler.json",
+    "deploy": "npm run build && wrangler deploy -c build/server/wrangler.json",
+    "cf-typegen": "wrangler types",
+    "typecheck": "react-router typegen && wrangler types && tsc"
+  },
+  "dependencies": {
+    "@react-router/node": "8.0.0",
+    "@react-router/serve": "8.0.0",
+    "@supabase/supabase-js": "^2.112.2",
+    "isbot": "^5.1.36",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
+    "lucide-react": "^1.27.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-router": "8.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.51.1",
+    "@react-router/dev": "8.0.0",
+    "@tailwindcss/vite": "^4.2.2",
+    "@types/node": "^22",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "tailwindcss": "^4.2.2",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.3",
+    "wrangler": "^4.120.0"
+  }
+}

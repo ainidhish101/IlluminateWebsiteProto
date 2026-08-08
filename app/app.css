@@ -1,0 +1,190 @@
+@import "tailwindcss";
+
+/*
+  Illuminate design system — "Chalkboard & Highlighter"
+  A student-run guidance nonprofit, styled like a well-used course
+  catalog and class notebook rather than a SaaS dashboard.
+  Colors are Illuminate's actual brand palette (navy / royal blue /
+  amber gold), carried over from illuminate-manus/client/src/index.css.
+*/
+@theme {
+  --font-display: "Big Shoulders Display", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Code", monospace;
+
+  --color-chalkboard: oklch(0.18 0.06 264); /* brand navy */
+  --color-chalkboard-soft: oklch(0.22 0.055 264); /* brand navy-light */
+  --color-paper: oklch(1 0 0); /* white */
+  --color-paper-dim: oklch(0.96 0.008 264); /* brand muted */
+  --color-ink: oklch(0.15 0.01 264); /* brand foreground */
+  --color-ink-soft: oklch(0.52 0.02 264); /* brand muted-foreground */
+  --color-chalk: oklch(0.93 0.01 264); /* off-white text on navy */
+  --color-chalk-soft: oklch(0.65 0.02 264); /* muted text on navy */
+  --color-marker: oklch(0.72 0.16 75); /* brand amber gold */
+  --color-marker-dim: oklch(0.65 0.16 75); /* gold hover */
+  --color-pen: oklch(0.52 0.22 264); /* brand royal blue — adapts per theme */
+  --color-pen-dim: oklch(0.45 0.22 264); /* blue hover — adapts per theme */
+  --color-rule: oklch(0.9 0.01 264); /* brand border */
+  --color-rule-dark: oklch(1 0 0 / 12%); /* border on navy */
+
+  /* Fixed (non-adaptive) variants: used where a color sits on a surface
+     that stays the same brightness in both themes — e.g. white text on a
+     solid blue button, or dark text on a solid gold button. */
+  --color-pen-solid: oklch(0.52 0.22 264);
+  --color-pen-solid-dim: oklch(0.45 0.22 264);
+  --color-ink-solid: oklch(0.15 0.01 264);
+
+  /* Status semantics for the dashboard. The rest of the site never needs a
+     "this went wrong" color; approval queues and priority tags do. */
+  --color-good: oklch(0.55 0.14 155);
+  --color-flag: oklch(0.55 0.19 25);
+}
+
+:root {
+  --shadow-rest: 0 1px 2px 0 oklch(0.2 0.05 264 / 6%);
+  --shadow-hover: 0 20px 40px -14px oklch(0.2 0.05 264 / 22%), 0 8px 18px -8px oklch(0.2 0.05 264 / 16%);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+/* Dark mode: same tokens, remapped so every page stays legible.
+   Toggled by setting data-theme="dark" on <html> (see ThemeToggle).
+   Paper and chalkboard both carry real navy chroma here — not a flat
+   black — so the brand's royal-blue identity holds in dark mode too. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-paper: oklch(0.22 0.05 264);
+  --color-paper-dim: oklch(0.27 0.055 264);
+  --color-ink: oklch(0.95 0.008 264);
+  --color-ink-soft: oklch(0.72 0.03 264);
+  --color-chalkboard: oklch(0.15 0.07 264);
+  --color-chalkboard-soft: oklch(0.19 0.065 264);
+  --color-pen: oklch(0.7 0.18 264);
+  --color-pen-dim: oklch(0.63 0.18 264);
+  --color-rule: oklch(0.4 0.045 264);
+  --color-good: oklch(0.75 0.15 155);
+  --color-flag: oklch(0.7 0.17 25);
+
+  --shadow-rest: 0 1px 2px 0 oklch(0 0 0 / 45%);
+  --shadow-hover: 0 24px 48px -14px oklch(0 0 0 / 60%), 0 0 0 1px oklch(0.7 0.18 264 / 22%),
+    0 10px 24px -10px oklch(0.7 0.18 264 / 30%);
+}
+
+html,
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+
+body {
+  font-family: var(--font-sans);
+}
+
+html,
+body,
+header,
+footer,
+section,
+main {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+/* Highlighter-marker stroke behind text, like a real highlighter pass */
+.marker-stroke {
+  background-image: linear-gradient(transparent 62%, var(--color-marker) 62%);
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  padding: 0 0.05em;
+}
+
+/* Numbered ticket / course-code chip */
+.course-code {
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+}
+
+/* Shared card depth effect. Uses theme-aware shadow variables instead of
+   Tailwind's default black shadow-md, which is basically invisible on a
+   dark navy background — dark mode gets a soft blue-tinted glow instead
+   of a light-mode drop shadow. */
+.card-elevate {
+  box-shadow: var(--shadow-rest);
+  transition: box-shadow 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.3s ease,
+    border-color 0.3s ease;
+}
+.card-elevate:hover {
+  box-shadow: var(--shadow-hover);
+  transform: translateY(-4px);
+  border-color: var(--color-pen);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-elevate,
+  .card-elevate:hover {
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+    transform: none;
+  }
+}
+
+/* Page-load entrance: a quiet fade + rise on the content that greets you
+   first on each page. Runs once on mount, no scroll-triggering needed. */
+@keyframes reveal-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.reveal {
+  animation: reveal-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.reveal-1 {
+  animation-delay: 0.05s;
+}
+.reveal-2 {
+  animation-delay: 0.14s;
+}
+.reveal-3 {
+  animation-delay: 0.23s;
+}
+.reveal-4 {
+  animation-delay: 0.32s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal,
+  .reveal-1,
+  .reveal-2,
+  .reveal-3,
+  .reveal-4 {
+    animation: none;
+  }
+}
+
+/* Underline that grows in from the left on hover — used for the top nav. */
+.nav-link {
+  position: relative;
+}
+.nav-link::after {
+  content: "";
+  position: absolute;
+  left: 0.625rem;
+  right: 0.625rem;
+  bottom: 0.2rem;
+  height: 1.5px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.nav-link:hover::after {
+  transform: scaleX(1);
+}

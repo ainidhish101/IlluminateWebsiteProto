@@ -1,0 +1,27 @@
+/**
+ * Cloudflare Workers deployment config.
+ *
+ * `main` is the Worker entry; `assets.directory` is the client bundle Vite
+ * emits. Cloudflare serves a matching static file directly when one exists and
+ * falls through to the Worker (SSR) otherwise — which is what keeps the public
+ * guide pages server-rendered for search crawlers.
+ *
+ * Environment variables (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY) are NOT
+ * set here. Vite inlines them into the bundle at build time, so they belong in
+ * the Cloudflare dashboard's build settings instead — see DEPLOYMENT.md.
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "illuminate",
+  "main": "./workers/app.ts",
+  "compatibility_date": "2026-08-07",
+  // Lets the Workers runtime polyfill the Node built-ins that React and the
+  // React Router server build still reach for.
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./build/client"
+  },
+  "observability": {
+    "enabled": true
+  }
+}
