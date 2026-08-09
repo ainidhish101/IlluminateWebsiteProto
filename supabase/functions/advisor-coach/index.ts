@@ -74,17 +74,42 @@ const MODE_CONFIG: Record<CoachMode, { maxOutputTokens: number }> = {
 const MAX_HISTORY_TURNS = 12;
 const MAX_MESSAGE_CHARS = 2000;
 
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") ?? "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+/*
+  ALLOWED_ORIGIN accepts a comma-separated list, e.g.
+  "http://localhost:5173,https://your-site.workers.dev" — a real workflow
+  needs both localhost (for continued dev) and the production domain live at
+  once, not one or the other.
 
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-  });
+  CORS has no wildcard-plus-list mode: the browser only accepts an
+  Access-Control-Allow-Origin that matches its own origin exactly, so serving
+  multiple origins means echoing back whichever one the request actually came
+  from, checked against the allowlist — never a fixed string. Get this wrong
+  and the browser drops the response with no readable error on the client
+  side, which is exactly what "Failed to send a request to the Edge Function"
+  looks like — there is nothing further to unwrap; the fetch itself failed.
+*/
+function buildCorsHeaders(req: Request): Record<string, string> {
+  const allowed = (Deno.env.get("ALLOWED_ORIGIN") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const origin = req.headers.get("Origin") ?? "";
+  const allowOrigin =
+    allowed.length === 0 // unset -> wide open, the permissive dev default
+      ? "*"
+      : allowed.includes(origin)
+        ? origin
+        : allowed[0]; // no match: won't satisfy the browser, but keeps the response well-formed
+
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    // Tells any cache that the response varies by Origin, since the same
+    // request path now returns a different ACAO value per caller.
+    Vary: "Origin",
+  };
 }
 
 /** Best-effort message extraction so a caught `unknown` still says something useful. */
@@ -169,7 +194,13 @@ async function callGemini(input: {
 /* ───────────────────────── handler ───────────────────────── */
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS });
+  // Computed once per request from THIS request's Origin header — see
+  // buildCorsHeaders' comment for why a fixed header can't serve two origins.
+  const cors = buildCorsHeaders(req);
+  const json = (body: unknown, status = 200): Response =>
+    new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
+
+  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "Use POST." }, 405);
 
   const geminiKey = Deno.env.get("GEMINI_API_KEY");
