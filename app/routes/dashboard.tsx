@@ -18,6 +18,7 @@ import type { Route } from "./+types/dashboard";
 import { Avatar, useAuth } from "~/auth";
 import { ThemeToggle } from "~/components/ThemeToggle";
 import { Sidebar } from "~/components/dashboard/Sidebar";
+import { AICoachChat } from "~/components/dashboard/AICoachChat";
 import { Chip } from "~/components/dashboard/ui";
 import { ROLE_LABEL } from "~/lib/roles";
 import type { DashboardContext } from "~/lib/dashboardContext";
@@ -112,6 +113,9 @@ export default function DashboardLayout() {
           <Outlet context={context} />
         </main>
       </div>
+
+      {/* Mounted once here so the coach follows the student across every tab. */}
+      <AICoachChat />
     </div>
   );
 }
