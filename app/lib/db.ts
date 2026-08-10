@@ -67,6 +67,17 @@ export type ApScoreRow = {
   created_at: string;
 };
 
+export type StandardizedTestScoreRow = {
+  id: string;
+  user_id: string;
+  test_type: string;
+  custom_test_name: string | null;
+  score: number;
+  max_score: number;
+  test_date: string;
+  created_at: string;
+};
+
 export type ExtracurricularRow = {
   id: string;
   user_id: string;
@@ -375,6 +386,42 @@ export async function deleteApScore(row: ApScoreRow): Promise<void> {
     await supabase.storage.from(AP_SCORE_REPORT_BUCKET).remove([row.score_report_path]);
   }
   const { error } = await supabase.from("ap_scores").delete().eq("id", row.id);
+  if (error) throw error;
+}
+
+/* ───────────────────────── standardized test scores ───────────────────────── */
+
+export async function listStandardizedTestScores(
+  userId: string,
+): Promise<StandardizedTestScoreRow[]> {
+  return unwrap<StandardizedTestScoreRow[]>(
+    await getSupabase()
+      .from("standardized_test_scores")
+      .select("*")
+      .eq("user_id", userId)
+      .order("test_date", { ascending: false }),
+  );
+}
+
+export async function addStandardizedTestScore(input: {
+  user_id: string;
+  test_type: string;
+  custom_test_name: string | null;
+  score: number;
+  max_score: number;
+  test_date: string;
+}): Promise<StandardizedTestScoreRow> {
+  const { data, error } = await getSupabase()
+    .from("standardized_test_scores")
+    .insert(input)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as StandardizedTestScoreRow;
+}
+
+export async function deleteStandardizedTestScore(id: string): Promise<void> {
+  const { error } = await getSupabase().from("standardized_test_scores").delete().eq("id", id);
   if (error) throw error;
 }
 

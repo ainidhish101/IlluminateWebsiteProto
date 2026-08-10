@@ -109,6 +109,20 @@ create table if not exists public.ap_scores (
   created_at         timestamptz not null default now()
 );
 
+create table if not exists public.standardized_test_scores (
+  id                uuid primary key default gen_random_uuid(),
+  user_id           uuid not null references public.profiles (id) on delete cascade,
+  -- One of STANDARD_TESTS' keys (app/data/standardizedTests.ts), or 'Custom'.
+  test_type         text not null,
+  -- Only set when test_type = 'Custom'.
+  custom_test_name  text,
+  score             numeric(6, 1) not null check (score >= 0),
+  max_score         numeric(6, 1) not null check (max_score > 0),
+  test_date         date not null,
+  created_at        timestamptz not null default now(),
+  constraint standardized_test_scores_score_in_range check (score <= max_score)
+);
+
 create table if not exists public.extracurriculars (
   id            uuid primary key default gen_random_uuid(),
   user_id       uuid not null references public.profiles (id) on delete cascade,
@@ -188,6 +202,7 @@ create table if not exists public.activity_log (
 create index if not exists academic_records_user_idx  on public.academic_records (user_id);
 create index if not exists transcripts_user_idx       on public.transcripts (user_id);
 create index if not exists ap_scores_user_idx         on public.ap_scores (user_id);
+create index if not exists standardized_scores_user_idx on public.standardized_test_scores (user_id);
 create index if not exists extracurriculars_user_idx  on public.extracurriculars (user_id);
 create index if not exists goals_user_idx             on public.goals (user_id);
 create index if not exists submissions_user_idx       on public.guides_submissions (user_id);
@@ -220,6 +235,7 @@ grant select, insert, update, delete on public.profiles           to authenticat
 grant select, insert, update, delete on public.academic_records   to authenticated;
 grant select, insert, update, delete on public.transcripts        to authenticated;
 grant select, insert, update, delete on public.ap_scores          to authenticated;
+grant select, insert, update, delete on public.standardized_test_scores to authenticated;
 grant select, insert, update, delete on public.extracurriculars   to authenticated;
 grant select, insert, update, delete on public.goals              to authenticated;
 grant select, insert, update, delete on public.guides_submissions to authenticated;
@@ -466,6 +482,7 @@ alter table public.profiles           enable row level security;
 alter table public.academic_records   enable row level security;
 alter table public.transcripts        enable row level security;
 alter table public.ap_scores          enable row level security;
+alter table public.standardized_test_scores enable row level security;
 alter table public.extracurriculars   enable row level security;
 alter table public.goals              enable row level security;
 alter table public.guides_submissions enable row level security;
@@ -503,8 +520,9 @@ create policy profiles_update_admin on public.profiles
   with check (public.is_admin());
 
 -- ------------------------------------------------- personal, owner-only ----
--- academic_records, transcripts, ap_scores, extracurriculars, and goals are
--- private to the student. Nobody else reads them — not Officers, not Directors.
+-- academic_records, transcripts, ap_scores, standardized_test_scores,
+-- extracurriculars, and goals are private to the student. Nobody else reads
+-- them — not Officers, not Directors.
 drop policy if exists academic_records_own on public.academic_records;
 create policy academic_records_own on public.academic_records
   for all to authenticated
@@ -519,6 +537,12 @@ create policy transcripts_own on public.transcripts
 
 drop policy if exists ap_scores_own on public.ap_scores;
 create policy ap_scores_own on public.ap_scores
+  for all to authenticated
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
+
+drop policy if exists standardized_test_scores_own on public.standardized_test_scores;
+create policy standardized_test_scores_own on public.standardized_test_scores
   for all to authenticated
   using (user_id = auth.uid())
   with check (user_id = auth.uid());

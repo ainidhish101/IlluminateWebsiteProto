@@ -10,7 +10,7 @@
   a specific piece of work.
 */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BadgeCheck,
   Clock,
@@ -18,6 +18,7 @@ import {
   Inbox,
   RotateCcw,
   ThumbsDown,
+  X,
 } from "lucide-react";
 import {
   Button,
@@ -30,6 +31,7 @@ import {
   Panel,
   StatTile,
   StatusPill,
+  TextArea,
   TextInput,
   formatDate,
 } from "~/components/dashboard/ui";
@@ -234,16 +236,23 @@ function DecisionPane({
   onChanged: () => void;
 }) {
   const { busy, error, setError, run } = useMutation();
+  const [rejectOpen, setRejectOpen] = useState(false);
 
-  async function decide(status: SubmissionStatus) {
+  async function decide(status: SubmissionStatus, feedbackOverride?: string) {
     const ok = await run(() =>
       reviewSubmission(submission.id, {
         status,
-        feedback: submission.feedback,
+        feedback: feedbackOverride ?? submission.feedback,
         reviewerId: adminId,
       }),
     );
     if (ok) onChanged();
+    return ok;
+  }
+
+  async function confirmReject(reason: string) {
+    const ok = await decide("rejected", reason);
+    if (ok) setRejectOpen(false);
   }
 
   return (
@@ -315,7 +324,7 @@ function DecisionPane({
               icon={ThumbsDown}
               busy={busy}
               disabled={submission.status === "rejected"}
-              onClick={() => decide("rejected")}
+              onClick={() => setRejectOpen(true)}
             >
               Reject
             </Button>
@@ -332,6 +341,149 @@ function DecisionPane({
           onGranted={onChanged}
         />
       )}
+
+      <RejectDialog
+        open={rejectOpen}
+        busy={busy}
+        error={error}
+        onCancel={() => {
+          setRejectOpen(false);
+          setError(null);
+        }}
+        onConfirm={confirmReject}
+      />
+    </div>
+  );
+}
+
+/**
+ * The reason is required and becomes the guide's feedback, so a rejection
+ * always leaves the Associate with a written explanation — never a silent
+ * status flip.
+ */
+function RejectDialog({
+  open,
+  busy,
+  error,
+  onCancel,
+  onConfirm,
+}: {
+  open: boolean;
+  busy: boolean;
+  error: string | null;
+  onCancel: () => void;
+  onConfirm: (reason: string) => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setReason("");
+    setValidationError(null);
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCancel();
+      if (e.key !== "Tab" || !dialogRef.current) return;
+      const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const raf = requestAnimationFrame(() => {
+      document.getElementById("reject-reason")?.focus();
+    });
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = prevOverflow;
+      cancelAnimationFrame(raf);
+    };
+  }, [open, onCancel]);
+
+  if (!open) return null;
+
+  function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (reason.trim().length < 5) {
+      setValidationError("Say why this guide is being rejected — the Associate sees this note.");
+      return;
+    }
+    onConfirm(reason.trim());
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-start sm:items-center justify-center p-4 py-10 overflow-y-auto bg-chalkboard/60 backdrop-blur-sm"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onCancel();
+      }}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="reject-dialog-title"
+        className="reveal w-full max-w-md bg-paper border border-rule rounded-xl shadow-2xl overflow-hidden my-auto"
+      >
+        <div className="flex items-start justify-between gap-4 px-6 pt-6 pb-4">
+          <div>
+            <p className="course-code text-[0.65rem] uppercase tracking-[0.15em] text-flag mb-2">
+              Reject guide
+            </p>
+            <h2
+              id="reject-dialog-title"
+              className="font-display font-extrabold text-2xl text-ink tracking-tight"
+            >
+              Explain the rejection
+            </h2>
+            <p className="text-ink-soft text-sm mt-1.5 leading-relaxed">
+              Required. This replaces any existing feedback and is what the Associate sees.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            aria-label="Close"
+            className="p-1.5 -mr-1.5 -mt-1 text-ink-soft hover:text-ink transition-colors rounded"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={submit} className="px-6 pb-6 space-y-4" noValidate>
+          {(validationError || error) && <ErrorNote message={validationError ?? error ?? ""} />}
+          <Field label="Reason for rejection" htmlFor="reject-reason">
+            <TextArea
+              id="reject-reason"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={5}
+              placeholder="What's wrong with this guide, and why it can't just go back for changes."
+              className="min-h-[7rem]"
+            />
+          </Field>
+          <div className="flex justify-end gap-2.5">
+            <Button type="button" variant="secondary" onClick={onCancel} disabled={busy}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="danger" icon={ThumbsDown} busy={busy}>
+              Reject guide
+            </Button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

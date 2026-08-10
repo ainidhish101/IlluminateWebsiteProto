@@ -15,6 +15,7 @@ import {
   GraduationCap,
   Layers,
   Plus,
+  Target,
   Trash2,
 } from "lucide-react";
 import {
@@ -32,23 +33,34 @@ import {
   Td,
   Th,
   TextInput,
+  formatDate,
 } from "~/components/dashboard/ui";
 import { useDashboard } from "~/lib/dashboardContext";
 import { useMutation, useQuery } from "~/lib/useQuery";
 import {
   addAcademicRecord,
   addApScore,
+  addStandardizedTestScore,
   apScoreReportUrl,
   deleteAcademicRecord,
   deleteApScore,
+  deleteStandardizedTestScore,
   listAcademicRecords,
   listApScores,
+  listStandardizedTestScores,
   type AcademicRecordRow,
   type ApScoreRow,
+  type StandardizedTestScoreRow,
 } from "~/lib/db";
 import { errorMessage } from "~/lib/supabase";
 import { GRADE_LETTERS, UNWEIGHTED_4_0, type GradeLetter } from "~/data/gpaSystems";
 import { AP_SCORES, AP_SCORE_LABEL, AP_SUBJECTS, type ApScoreValue } from "~/data/apSubjects";
+import {
+  CUSTOM_TEST_KEY,
+  STANDARD_TESTS,
+  maxScoreFor,
+  type TestTypeKey,
+} from "~/data/standardizedTests";
 
 const AP_REPORT_ACCEPTED = ".pdf,.png,.jpg,.jpeg,.webp,.heic";
 const AP_REPORT_MAX_BYTES = 10 * 1024 * 1024;
@@ -87,6 +99,8 @@ export default function AcademicsTab() {
   const rows = records.data ?? [];
   const apScores = useQuery(() => listApScores(user.id), [user.id]);
   const apRows = apScores.data ?? [];
+  const testScores = useQuery(() => listStandardizedTestScores(user.id), [user.id]);
+  const testRows = testScores.data ?? [];
 
   const overall = useMemo(() => gpaOf(rows), [rows]);
 
@@ -129,6 +143,41 @@ export default function AcademicsTab() {
           icon={BookMarked}
           tone="good"
         />
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[1fr_22rem] items-start mb-8">
+        <Panel
+          title="Standardized testing"
+          description="SAT, ACT, PSAT, or any other test — log every sitting, oldest to newest."
+        >
+          <DataBoundary loading={testScores.loading} error={testScores.error}>
+            {testRows.length === 0 ? (
+              <EmptyState
+                icon={Target}
+                title="No test scores yet."
+                description="Add your first SAT, ACT, PSAT, or custom test score with the form beside this panel."
+              />
+            ) : (
+              <TableWrap>
+                <thead>
+                  <tr>
+                    <Th>Test</Th>
+                    <Th>Score</Th>
+                    <Th>Date</Th>
+                    <Th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {testRows.map((row) => (
+                    <TestScoreRowView key={row.id} row={row} onChanged={testScores.reload} />
+                  ))}
+                </tbody>
+              </TableWrap>
+            )}
+          </DataBoundary>
+        </Panel>
+
+        <AddTestScoreForm userId={user.id} onAdded={testScores.reload} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_22rem] items-start">
@@ -509,6 +558,170 @@ function AddApScoreForm({ userId, onAdded }: { userId: string; onAdded: () => vo
         </Field>
         <Button type="submit" icon={Plus} busy={busy} className="w-full">
           Add AP score
+        </Button>
+      </form>
+    </Panel>
+  );
+}
+
+function testLabel(row: StandardizedTestScoreRow): string {
+  return row.test_type === CUSTOM_TEST_KEY
+    ? row.custom_test_name || "Custom test"
+    : row.test_type;
+}
+
+function TestScoreRowView({
+  row,
+  onChanged,
+}: {
+  row: StandardizedTestScoreRow;
+  onChanged: () => void;
+}) {
+  const { busy, run } = useMutation();
+
+  return (
+    <tr>
+      <Td className="text-ink font-medium">{testLabel(row)}</Td>
+      <Td className="text-ink-soft tabular-nums">
+        {row.score} <span className="text-ink-soft">/ {row.max_score}</span>
+      </Td>
+      <Td className="text-ink-soft whitespace-nowrap">{formatDate(row.test_date)}</Td>
+      <Td className="text-right">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={async () => {
+            if (await run(() => deleteStandardizedTestScore(row.id))) onChanged();
+          }}
+          aria-label={`Remove ${testLabel(row)}`}
+          className="p-1.5 text-ink-soft hover:text-flag transition-colors rounded disabled:opacity-50"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </Td>
+    </tr>
+  );
+}
+
+function AddTestScoreForm({ userId, onAdded }: { userId: string; onAdded: () => void }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [testType, setTestType] = useState<TestTypeKey>(STANDARD_TESTS[0].key);
+  const [customName, setCustomName] = useState("");
+  const [customMaxScore, setCustomMaxScore] = useState("100");
+  const [score, setScore] = useState("");
+  const [testDate, setTestDate] = useState(today);
+  const { busy, error, setError, run } = useMutation();
+
+  const isCustom = testType === CUSTOM_TEST_KEY;
+  const maxScore = isCustom ? Number(customMaxScore) : maxScoreFor(testType) ?? 0;
+
+  async function onSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    if (isCustom && customName.trim().length < 2) {
+      setError("Name the test.");
+      return;
+    }
+    if (!Number.isFinite(maxScore) || maxScore <= 0) {
+      setError("Max score must be a number above zero.");
+      return;
+    }
+    const scoreValue = Number(score);
+    if (!Number.isFinite(scoreValue) || scoreValue < 0 || scoreValue > maxScore) {
+      setError(`Score must be between 0 and ${maxScore}.`);
+      return;
+    }
+    if (!testDate) {
+      setError("Pick the test date.");
+      return;
+    }
+    const ok = await run(() =>
+      addStandardizedTestScore({
+        user_id: userId,
+        test_type: testType,
+        custom_test_name: isCustom ? customName.trim() : null,
+        score: scoreValue,
+        max_score: maxScore,
+        test_date: testDate,
+      }),
+    );
+    if (!ok) return;
+    setScore("");
+    setCustomName("");
+    setCustomMaxScore("100");
+    setTestDate(today);
+    onAdded();
+  }
+
+  return (
+    <Panel title="Add a test score" className="lg:sticky lg:top-24">
+      <form onSubmit={onSubmit} className="space-y-4" noValidate>
+        {error && <ErrorNote message={error} />}
+        <Field label="Test" htmlFor="test-type">
+          <SelectInput
+            id="test-type"
+            value={testType}
+            onChange={(e) => setTestType(e.target.value as TestTypeKey)}
+          >
+            {STANDARD_TESTS.map((test) => (
+              <option key={test.key} value={test.key}>
+                {test.label}
+              </option>
+            ))}
+            <option value={CUSTOM_TEST_KEY}>Other (custom)</option>
+          </SelectInput>
+        </Field>
+
+        {isCustom && (
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Test name" htmlFor="test-custom-name">
+              <TextInput
+                id="test-custom-name"
+                value={customName}
+                onChange={(e) => setCustomName(e.target.value)}
+                placeholder="e.g. CLT, IB, TOEFL"
+              />
+            </Field>
+            <Field label="Out of" htmlFor="test-max-score">
+              <TextInput
+                id="test-max-score"
+                type="number"
+                min="1"
+                step="1"
+                value={customMaxScore}
+                onChange={(e) => setCustomMaxScore(e.target.value)}
+              />
+            </Field>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field
+            label="Score"
+            htmlFor="test-score"
+            hint={!isCustom ? `Out of ${maxScore}` : undefined}
+          >
+            <TextInput
+              id="test-score"
+              type="number"
+              min="0"
+              max={isCustom ? undefined : maxScore}
+              step="1"
+              value={score}
+              onChange={(e) => setScore(e.target.value)}
+            />
+          </Field>
+          <Field label="Date" htmlFor="test-date">
+            <TextInput
+              id="test-date"
+              type="date"
+              value={testDate}
+              onChange={(e) => setTestDate(e.target.value)}
+            />
+          </Field>
+        </div>
+
+        <Button type="submit" icon={Plus} busy={busy} className="w-full">
+          Add test score
         </Button>
       </form>
     </Panel>
