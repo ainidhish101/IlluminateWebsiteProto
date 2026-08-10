@@ -97,6 +97,18 @@ create table if not exists public.transcripts (
   uploaded_at timestamptz not null default now()
 );
 
+create table if not exists public.ap_scores (
+  id                 uuid primary key default gen_random_uuid(),
+  user_id            uuid not null references public.profiles (id) on delete cascade,
+  subject            text not null,
+  score              smallint not null check (score between 1 and 5),
+  exam_year          smallint not null,
+  -- Path inside the private `ap-score-reports` bucket, "<user id>/<file>". Optional.
+  score_report_path  text,
+  score_report_name  text,
+  created_at         timestamptz not null default now()
+);
+
 create table if not exists public.extracurriculars (
   id            uuid primary key default gen_random_uuid(),
   user_id       uuid not null references public.profiles (id) on delete cascade,
@@ -175,6 +187,7 @@ create table if not exists public.activity_log (
 
 create index if not exists academic_records_user_idx  on public.academic_records (user_id);
 create index if not exists transcripts_user_idx       on public.transcripts (user_id);
+create index if not exists ap_scores_user_idx         on public.ap_scores (user_id);
 create index if not exists extracurriculars_user_idx  on public.extracurriculars (user_id);
 create index if not exists goals_user_idx             on public.goals (user_id);
 create index if not exists submissions_user_idx       on public.guides_submissions (user_id);
@@ -206,6 +219,7 @@ grant usage on schema public to authenticated;
 grant select, insert, update, delete on public.profiles           to authenticated;
 grant select, insert, update, delete on public.academic_records   to authenticated;
 grant select, insert, update, delete on public.transcripts        to authenticated;
+grant select, insert, update, delete on public.ap_scores          to authenticated;
 grant select, insert, update, delete on public.extracurriculars   to authenticated;
 grant select, insert, update, delete on public.goals              to authenticated;
 grant select, insert, update, delete on public.guides_submissions to authenticated;
@@ -451,6 +465,7 @@ create trigger submissions_guard_review
 alter table public.profiles           enable row level security;
 alter table public.academic_records   enable row level security;
 alter table public.transcripts        enable row level security;
+alter table public.ap_scores          enable row level security;
 alter table public.extracurriculars   enable row level security;
 alter table public.goals              enable row level security;
 alter table public.guides_submissions enable row level security;
@@ -488,8 +503,8 @@ create policy profiles_update_admin on public.profiles
   with check (public.is_admin());
 
 -- ------------------------------------------------- personal, owner-only ----
--- academic_records, transcripts, extracurriculars, and goals are private to
--- the student. Nobody else reads them — not Officers, not Directors.
+-- academic_records, transcripts, ap_scores, extracurriculars, and goals are
+-- private to the student. Nobody else reads them — not Officers, not Directors.
 drop policy if exists academic_records_own on public.academic_records;
 create policy academic_records_own on public.academic_records
   for all to authenticated
@@ -498,6 +513,12 @@ create policy academic_records_own on public.academic_records
 
 drop policy if exists transcripts_own on public.transcripts;
 create policy transcripts_own on public.transcripts
+  for all to authenticated
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
+
+drop policy if exists ap_scores_own on public.ap_scores;
+create policy ap_scores_own on public.ap_scores
   for all to authenticated
   using (user_id = auth.uid())
   with check (user_id = auth.uid());
@@ -704,6 +725,42 @@ create policy transcripts_delete on storage.objects
   for delete to authenticated
   using (
     bucket_id = 'transcripts'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+
+-- ============================================================================
+-- 6b. STORAGE — private AP score report bucket
+-- ============================================================================
+
+insert into storage.buckets (id, name, public)
+values ('ap-score-reports', 'ap-score-reports', false)
+on conflict (id) do nothing;
+
+-- Objects are keyed "<user id>/<timestamp>-<filename>", so the first path
+-- segment is the owner. That is what these policies check.
+drop policy if exists ap_score_reports_read   on storage.objects;
+drop policy if exists ap_score_reports_write  on storage.objects;
+drop policy if exists ap_score_reports_delete on storage.objects;
+
+create policy ap_score_reports_read on storage.objects
+  for select to authenticated
+  using (
+    bucket_id = 'ap-score-reports'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+create policy ap_score_reports_write on storage.objects
+  for insert to authenticated
+  with check (
+    bucket_id = 'ap-score-reports'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+create policy ap_score_reports_delete on storage.objects
+  for delete to authenticated
+  using (
+    bucket_id = 'ap-score-reports'
     and (storage.foldername(name))[1] = auth.uid()::text
   );
 

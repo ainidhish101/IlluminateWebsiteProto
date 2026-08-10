@@ -11,7 +11,7 @@
   foreign-key constraint names.
 */
 
-import { getSupabase, TRANSCRIPT_BUCKET } from "./supabase";
+import { getSupabase, AP_SCORE_REPORT_BUCKET, TRANSCRIPT_BUCKET } from "./supabase";
 import type {
   ActivityCategory,
   GoalHorizon,
@@ -54,6 +54,17 @@ export type TranscriptRow = {
   file_name: string;
   note: string | null;
   uploaded_at: string;
+};
+
+export type ApScoreRow = {
+  id: string;
+  user_id: string;
+  subject: string;
+  score: number;
+  exam_year: number;
+  score_report_path: string | null;
+  score_report_name: string | null;
+  created_at: string;
 };
 
 export type ExtracurricularRow = {
@@ -290,6 +301,80 @@ export async function deleteTranscript(row: TranscriptRow): Promise<void> {
   const supabase = getSupabase();
   await supabase.storage.from(TRANSCRIPT_BUCKET).remove([row.file_path]);
   const { error } = await supabase.from("transcripts").delete().eq("id", row.id);
+  if (error) throw error;
+}
+
+/* ───────────────────────── AP scores ───────────────────────── */
+
+export async function listApScores(userId: string): Promise<ApScoreRow[]> {
+  return unwrap<ApScoreRow[]>(
+    await getSupabase()
+      .from("ap_scores")
+      .select("*")
+      .eq("user_id", userId)
+      .order("exam_year", { ascending: false })
+      .order("created_at", { ascending: false }),
+  );
+}
+
+/**
+ * Adds an AP score, optionally attaching a scanned score report. The report,
+ * if present, uploads first — same private-bucket, owner-prefixed path
+ * convention as `uploadTranscript`.
+ */
+export async function addApScore(input: {
+  user_id: string;
+  subject: string;
+  score: number;
+  exam_year: number;
+  report?: File | null;
+}): Promise<ApScoreRow> {
+  const supabase = getSupabase();
+  let score_report_path: string | null = null;
+  let score_report_name: string | null = null;
+
+  if (input.report) {
+    const safeName = input.report.name.replace(/[^\w.\-]+/g, "_");
+    const path = `${input.user_id}/${Date.now()}-${safeName}`;
+    const { error: uploadError } = await supabase.storage
+      .from(AP_SCORE_REPORT_BUCKET)
+      .upload(path, input.report, { upsert: false, contentType: input.report.type || undefined });
+    if (uploadError) throw uploadError;
+    score_report_path = path;
+    score_report_name = input.report.name;
+  }
+
+  const { data, error } = await supabase
+    .from("ap_scores")
+    .insert({
+      user_id: input.user_id,
+      subject: input.subject,
+      score: input.score,
+      exam_year: input.exam_year,
+      score_report_path,
+      score_report_name,
+    })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as ApScoreRow;
+}
+
+/** Signed URL for a private score report. Valid for one hour. */
+export async function apScoreReportUrl(path: string): Promise<string> {
+  const { data, error } = await getSupabase()
+    .storage.from(AP_SCORE_REPORT_BUCKET)
+    .createSignedUrl(path, 3600);
+  if (error) throw error;
+  return data.signedUrl;
+}
+
+export async function deleteApScore(row: ApScoreRow): Promise<void> {
+  const supabase = getSupabase();
+  if (row.score_report_path) {
+    await supabase.storage.from(AP_SCORE_REPORT_BUCKET).remove([row.score_report_path]);
+  }
+  const { error } = await supabase.from("ap_scores").delete().eq("id", row.id);
   if (error) throw error;
 }
 

@@ -7,31 +7,59 @@
   is built for them.
 */
 
-import { useMemo, useState } from "react";
-import { GraduationCap, Layers, Plus, Trash2, BookMarked } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import {
+  Award,
+  BookMarked,
+  Download,
+  GraduationCap,
+  Layers,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import {
   Button,
+  Chip,
   DataBoundary,
   EmptyState,
+  ErrorNote,
   Field,
   PageHeader,
   Panel,
   SelectInput,
   StatTile,
+  TableWrap,
   Td,
   Th,
   TextInput,
-  ErrorNote,
 } from "~/components/dashboard/ui";
 import { useDashboard } from "~/lib/dashboardContext";
 import { useMutation, useQuery } from "~/lib/useQuery";
 import {
   addAcademicRecord,
+  addApScore,
+  apScoreReportUrl,
   deleteAcademicRecord,
+  deleteApScore,
   listAcademicRecords,
+  listApScores,
   type AcademicRecordRow,
+  type ApScoreRow,
 } from "~/lib/db";
+import { errorMessage } from "~/lib/supabase";
 import { GRADE_LETTERS, UNWEIGHTED_4_0, type GradeLetter } from "~/data/gpaSystems";
+import { AP_SCORES, AP_SCORE_LABEL, AP_SUBJECTS, type ApScoreValue } from "~/data/apSubjects";
+
+const AP_REPORT_ACCEPTED = ".pdf,.png,.jpg,.jpeg,.webp,.heic";
+const AP_REPORT_MAX_BYTES = 10 * 1024 * 1024;
+
+const AP_SCORE_TONE: Record<ApScoreValue, "good" | "marker" | "flag"> = {
+  5: "good",
+  4: "good",
+  3: "marker",
+  2: "flag",
+  1: "flag",
+};
 
 const SEMESTER_SUGGESTIONS = [
   "Fall 2025",
@@ -57,6 +85,8 @@ export default function AcademicsTab() {
   const { user } = useDashboard();
   const records = useQuery(() => listAcademicRecords(user.id), [user.id]);
   const rows = records.data ?? [];
+  const apScores = useQuery(() => listApScores(user.id), [user.id]);
+  const apRows = apScores.data ?? [];
 
   const overall = useMemo(() => gpaOf(rows), [rows]);
 
@@ -151,6 +181,42 @@ export default function AcademicsTab() {
         </Panel>
 
         <AddCourseForm userId={user.id} onAdded={records.reload} />
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[1fr_22rem] items-start mt-8">
+        <Panel
+          title="AP exam scores"
+          description="Self-reported. Add a score as soon as College Board releases it, with an optional copy of your score report."
+        >
+          <DataBoundary loading={apScores.loading} error={apScores.error}>
+            {apRows.length === 0 ? (
+              <EmptyState
+                icon={Award}
+                title="No AP scores yet."
+                description="Add your first exam score with the form beside this panel."
+              />
+            ) : (
+              <TableWrap>
+                <thead>
+                  <tr>
+                    <Th>Subject</Th>
+                    <Th>Score</Th>
+                    <Th>Year</Th>
+                    <Th>Report</Th>
+                    <Th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {apRows.map((row) => (
+                    <ApScoreRowView key={row.id} row={row} onChanged={apScores.reload} />
+                  ))}
+                </tbody>
+              </TableWrap>
+            )}
+          </DataBoundary>
+        </Panel>
+
+        <AddApScoreForm userId={user.id} onAdded={apScores.reload} />
       </div>
     </>
   );
@@ -270,6 +336,179 @@ function AddCourseForm({ userId, onAdded }: { userId: string; onAdded: () => voi
         </Field>
         <Button type="submit" icon={Plus} busy={busy} className="w-full">
           Add course
+        </Button>
+      </form>
+    </Panel>
+  );
+}
+
+function ApScoreRowView({ row, onChanged }: { row: ApScoreRow; onChanged: () => void }) {
+  const { busy, run } = useMutation();
+  const [linkError, setLinkError] = useState("");
+
+  async function openReport() {
+    if (!row.score_report_path) return;
+    try {
+      const url = await apScoreReportUrl(row.score_report_path);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      setLinkError(errorMessage(error, "Couldn't open that file."));
+    }
+  }
+
+  return (
+    <tr>
+      <Td className="text-ink font-medium">{row.subject}</Td>
+      <Td>
+        <Chip tone={AP_SCORE_TONE[row.score as ApScoreValue] ?? "neutral"}>{row.score}</Chip>
+      </Td>
+      <Td className="text-ink-soft tabular-nums">{row.exam_year}</Td>
+      <Td>
+        {row.score_report_path ? (
+          <button
+            type="button"
+            onClick={openReport}
+            className="inline-flex items-center gap-1.5 text-pen hover:underline text-sm font-medium"
+          >
+            <Download className="w-3.5 h-3.5" />
+            {row.score_report_name || "Download"}
+          </button>
+        ) : (
+          <span className="text-ink-soft">—</span>
+        )}
+        {linkError && <span className="block text-flag text-xs mt-1">{linkError}</span>}
+      </Td>
+      <Td className="text-right">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={async () => {
+            if (await run(() => deleteApScore(row))) onChanged();
+          }}
+          aria-label={`Remove ${row.subject}`}
+          className="p-1.5 text-ink-soft hover:text-flag transition-colors rounded disabled:opacity-50"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </Td>
+    </tr>
+  );
+}
+
+function AddApScoreForm({ userId, onAdded }: { userId: string; onAdded: () => void }) {
+  const currentYear = new Date().getFullYear();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [subject, setSubject] = useState<string>(AP_SUBJECTS[0]);
+  const [score, setScore] = useState<ApScoreValue>(5);
+  const [examYear, setExamYear] = useState(String(currentYear));
+  const [report, setReport] = useState<File | null>(null);
+  const { busy, error, setError, run } = useMutation();
+
+  function pickReport(candidate: File | undefined) {
+    if (!candidate) return;
+    if (candidate.size > AP_REPORT_MAX_BYTES) {
+      setError("That file is over 10 MB. Compress it or export a smaller PDF.");
+      return;
+    }
+    setError(null);
+    setReport(candidate);
+  }
+
+  async function onSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    const yearValue = Number(examYear);
+    if (!Number.isInteger(yearValue) || yearValue < 2000 || yearValue > currentYear + 1) {
+      setError("Enter a valid exam year.");
+      return;
+    }
+    const ok = await run(() =>
+      addApScore({
+        user_id: userId,
+        subject,
+        score,
+        exam_year: yearValue,
+        report,
+      }),
+    );
+    if (!ok) return;
+    setSubject(AP_SUBJECTS[0]);
+    setScore(5);
+    setExamYear(String(currentYear));
+    setReport(null);
+    if (inputRef.current) inputRef.current.value = "";
+    onAdded();
+  }
+
+  return (
+    <Panel title="Add an AP score" className="lg:sticky lg:top-24">
+      <form onSubmit={onSubmit} className="space-y-4" noValidate>
+        {error && <ErrorNote message={error} />}
+        <Field label="Subject" htmlFor="ap-subject">
+          <SelectInput
+            id="ap-subject"
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+          >
+            {AP_SUBJECTS.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Score" htmlFor="ap-score">
+            <SelectInput
+              id="ap-score"
+              value={score}
+              onChange={(e) => setScore(Number(e.target.value) as ApScoreValue)}
+            >
+              {AP_SCORES.map((value) => (
+                <option key={value} value={value}>
+                  {AP_SCORE_LABEL[value]}
+                </option>
+              ))}
+            </SelectInput>
+          </Field>
+          <Field label="Exam year" htmlFor="ap-year">
+            <TextInput
+              id="ap-year"
+              type="number"
+              min="2000"
+              max={currentYear + 1}
+              value={examYear}
+              onChange={(e) => setExamYear(e.target.value)}
+            />
+          </Field>
+        </div>
+        <Field
+          label="Score report"
+          htmlFor="ap-report"
+          hint="Optional — PDF or photo, up to 10 MB."
+        >
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              className="px-3 py-2 border border-rule bg-paper hover:border-pen rounded-lg text-sm font-semibold text-ink transition-colors shrink-0"
+            >
+              {report ? "Change file" : "Choose file"}
+            </button>
+            <span className="text-ink-soft text-xs truncate">
+              {report ? report.name : "No file selected"}
+            </span>
+          </div>
+          <input
+            ref={inputRef}
+            id="ap-report"
+            type="file"
+            accept={AP_REPORT_ACCEPTED}
+            className="sr-only"
+            onChange={(e) => pickReport(e.target.files?.[0])}
+          />
+        </Field>
+        <Button type="submit" icon={Plus} busy={busy} className="w-full">
+          Add AP score
         </Button>
       </form>
     </Panel>

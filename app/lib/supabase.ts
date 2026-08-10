@@ -23,6 +23,9 @@ export const isSupabaseConfigured = Boolean(url && anonKey);
 /** Storage bucket that holds uploaded transcript files. Must exist in Supabase. */
 export const TRANSCRIPT_BUCKET = "transcripts";
 
+/** Storage bucket that holds uploaded AP score report files. Must exist in Supabase. */
+export const AP_SCORE_REPORT_BUCKET = "ap-score-reports";
+
 let client: SupabaseClient | null = null;
 
 /** Throws if called before the env vars are set — always guard with `isSupabaseConfigured`. */
