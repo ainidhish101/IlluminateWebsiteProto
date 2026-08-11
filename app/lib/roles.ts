@@ -142,7 +142,7 @@ export const TABS: TabDef[] = [
   { to: "academics", label: "Academic Records", icon: "GraduationCap", minRole: "member", group: "Personal" },
   { to: "transcripts", label: "Transcripts", icon: "FileText", minRole: "member", group: "Personal" },
   { to: "activities", label: "Extracurriculars", icon: "Trophy", minRole: "member", group: "Personal" },
-  { to: "resources", label: "Study Resources", icon: "BookOpen", minRole: "member", group: "Personal" },
+  { to: "resources", label: "Guides", icon: "BookOpen", minRole: "member", group: "Personal" },
   { to: "goals", label: "Personal Goals", icon: "Target", minRole: "member", group: "Personal" },
   { to: "calendar", label: "Calendar", icon: "CalendarDays", minRole: "member", group: "Personal" },
 
