@@ -343,6 +343,10 @@ grant execute on function public.seed_admin_email()         to authenticated, su
 -- Every new auth user gets a profile in the same transaction, seeded from the
 -- metadata the signup form passes in options.data. Everyone starts as Member,
 -- except the seed admin address above, which starts as Director.
+--
+-- Google sign-in populates this same raw_user_meta_data with `full_name` and
+-- `avatar_url` (Supabase normalizes Google's OIDC claims to those two keys),
+-- so a Google account gets a real name and photo with no extra code here.
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
@@ -350,11 +354,12 @@ security definer
 set search_path = public
 as $$
 begin
-  insert into public.profiles (id, email, full_name, grade_level, interests, role)
+  insert into public.profiles (id, email, full_name, avatar_url, grade_level, interests, role)
   values (
     new.id,
     new.email,
     nullif(trim(coalesce(new.raw_user_meta_data ->> 'full_name', '')), ''),
+    nullif(trim(coalesce(new.raw_user_meta_data ->> 'avatar_url', '')), ''),
     nullif(trim(coalesce(new.raw_user_meta_data ->> 'grade_level', '')), ''),
     nullif(trim(coalesce(new.raw_user_meta_data ->> 'interests', '')), ''),
     case

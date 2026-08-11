@@ -201,8 +201,8 @@ export default function Navbar() {
 
   return (
     <header
-      className={`sticky top-0 z-50 bg-paper transition-shadow ${
-        scrolled ? "shadow-[0_1px_0_0_var(--color-rule)]" : ""
+      className={`nav-chrome sticky top-0 z-50 transition-[background-color,backdrop-filter,box-shadow] duration-300 ${
+        scrolled ? "nav-chrome-scrolled shadow-[0_1px_0_0_var(--color-rule)]" : "bg-paper"
       }`}
     >
       <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8">

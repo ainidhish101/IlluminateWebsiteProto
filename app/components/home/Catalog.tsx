@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import { Icon, categoryIcon } from "../Icon";
+import { useRevealOnScroll } from "../../hooks/useRevealOnScroll";
 
 const sections = [
   {
@@ -46,6 +47,39 @@ const sections = [
   },
 ];
 
+function CatalogCard({ section, index }: { section: (typeof sections)[number]; index: number }) {
+  const { ref, visible } = useRevealOnScroll<HTMLAnchorElement>();
+
+  return (
+    <Link
+      ref={ref}
+      to={section.href}
+      style={{ transitionDelay: visible ? `${Math.min(index, 5) * 70}ms` : "0ms" }}
+      className={`card-elevate press group bg-paper hover:bg-paper-dim border border-rule rounded-lg p-7 flex flex-col reveal-up ${
+        visible ? "is-visible" : ""
+      }`}
+    >
+      <div className="flex items-start justify-between mb-5">
+        <div className="flex items-center gap-3">
+          <span className="flex items-center justify-center w-10 h-10 rounded-full bg-pen/10 text-pen shrink-0">
+            <Icon name={categoryIcon(section.href.slice(1))} className="w-5 h-5 pop-on-hover" />
+          </span>
+          <span className="course-code text-sm text-pen border border-pen/30 rounded-md px-2 py-0.5">
+            {section.code}
+          </span>
+        </div>
+        <span className="course-code text-[0.65rem] text-ink-soft uppercase">
+          {section.count}
+        </span>
+      </div>
+      <h3 className="font-display font-bold text-2xl text-ink group-hover:text-pen underline decoration-transparent group-hover:decoration-marker decoration-4 underline-offset-4 transition-colors mb-2">
+        {section.label}
+      </h3>
+      <p className="text-ink-soft text-sm sm:text-base leading-relaxed">{section.desc}</p>
+    </Link>
+  );
+}
+
 export default function Catalog() {
   return (
     <section className="bg-paper py-24 sm:py-32">
@@ -66,32 +100,8 @@ export default function Catalog() {
         </div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {sections.map((s) => (
-            <Link
-              key={s.code}
-              to={s.href}
-              className="card-elevate group bg-paper hover:bg-paper-dim border border-rule rounded-lg p-7 flex flex-col"
-            >
-              <div className="flex items-start justify-between mb-5">
-                <div className="flex items-center gap-3">
-                  <span className="flex items-center justify-center w-10 h-10 rounded-full bg-pen/10 text-pen shrink-0">
-                    <Icon name={categoryIcon(s.href.slice(1))} className="w-5 h-5" />
-                  </span>
-                  <span className="course-code text-sm text-pen border border-pen/30 rounded-md px-2 py-0.5">
-                    {s.code}
-                  </span>
-                </div>
-                <span className="course-code text-[0.65rem] text-ink-soft uppercase">
-                  {s.count}
-                </span>
-              </div>
-              <h3 className="font-display font-bold text-2xl text-ink group-hover:text-pen underline decoration-transparent group-hover:decoration-marker decoration-4 underline-offset-4 transition-colors mb-2">
-                {s.label}
-              </h3>
-              <p className="text-ink-soft text-sm sm:text-base leading-relaxed">
-                {s.desc}
-              </p>
-            </Link>
+          {sections.map((s, i) => (
+            <CatalogCard key={s.code} section={s} index={i} />
           ))}
         </div>
       </div>

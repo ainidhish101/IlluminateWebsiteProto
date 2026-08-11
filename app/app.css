@@ -169,6 +169,104 @@ main {
   }
 }
 
+/* Instant press feedback — triggers on pointer-down via :active, not on
+   release, so buttons and cards feel grabbed rather than clicked. */
+.press {
+  transition: transform 100ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.press:active {
+  transform: scale(0.96);
+}
+@media (prefers-reduced-motion: reduce) {
+  .press:active {
+    transform: none;
+  }
+}
+
+/* Scroll-triggered entrance (paired with useRevealOnScroll). Critically
+   damped — no bounce, since arriving-on-scroll isn't a momentum gesture. */
+.reveal-up {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+.reveal-up.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal-up {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/* A little bounce, reserved for small decorative elements a hover "flicks"
+   into place — never on layout-affecting motion. */
+.pop-on-hover {
+  transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.group:hover .pop-on-hover {
+  transform: scale(1.12) rotate(-4deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .group:hover .pop-on-hover {
+    transform: none;
+  }
+}
+
+/* Washes a photo in the brand's navy → gold duotone instead of leaving it
+   generically colored, so stock photography reads as "ours." */
+.photo-duotone {
+  position: relative;
+  isolation: isolate;
+}
+.photo-duotone > img {
+  filter: grayscale(1) contrast(1.12) brightness(0.92);
+}
+.photo-duotone::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    oklch(0.18 0.06 264 / 60%),
+    oklch(0.72 0.16 75 / 22%)
+  );
+  mix-blend-mode: color;
+  pointer-events: none;
+}
+
+/* Floating translucent chrome — content scrolls underneath instead of
+   ducking under a hard opaque bar. Frosts to solid when the OS asks for
+   less transparency. */
+.nav-chrome-scrolled {
+  background-color: color-mix(in oklch, var(--color-paper) 85%, transparent);
+  backdrop-filter: blur(16px) saturate(180%);
+}
+@media (prefers-reduced-transparency: reduce) {
+  .nav-chrome-scrolled {
+    background-color: var(--color-paper);
+    backdrop-filter: none;
+  }
+}
+
+/* Same material, dark variant — for translucent chrome floating over a
+   navy/photo surface instead of a paper one (e.g. the hero's stat bar). */
+.glass-chalk {
+  background-color: color-mix(in oklch, var(--color-chalkboard) 45%, transparent);
+  backdrop-filter: blur(16px) saturate(160%);
+}
+@media (prefers-reduced-transparency: reduce) {
+  .glass-chalk {
+    background-color: var(--color-chalkboard);
+    backdrop-filter: none;
+  }
+}
+
 /* Underline that grows in from the left on hover — used for the top nav. */
 .nav-link {
   position: relative;

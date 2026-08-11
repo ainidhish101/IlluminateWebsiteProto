@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { useRevealOnScroll } from "../../hooks/useRevealOnScroll";
 
 const points = [
   {
@@ -23,17 +24,38 @@ const points = [
   },
 ];
 
+const MAIN_IMAGE =
+  "https://d2xsxph8kpxj0f.cloudfront.net/310519663701351808/9t6sWoci7JX6fK6AA4wSmM/illuminate-about-kpePWue6SZLGeNfDckHshB.webp";
+const ACCENT_IMAGE =
+  "https://images.unsplash.com/photo-1769794370964-78412732f1cd?q=80&w=900&auto=format&fit=crop";
+
 export default function WhyIlluminate() {
+  const image = useRevealOnScroll<HTMLDivElement>();
+  const copy = useRevealOnScroll<HTMLDivElement>();
+
   return (
     <section className="bg-paper-dim py-24 sm:py-32 border-y border-rule">
       <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid lg:grid-cols-2 gap-16 lg:gap-24 items-start">
-          <div className="relative">
-            <div className="aspect-[4/3] overflow-hidden rounded-lg shadow-sm">
+          <div
+            ref={image.ref}
+            className={`relative group mb-10 lg:mb-0 reveal-up ${image.visible ? "is-visible" : ""}`}
+          >
+            <div className="photo-duotone aspect-[4/3] overflow-hidden rounded-lg shadow-[var(--shadow-rest)]">
               <img
-                src="https://d2xsxph8kpxj0f.cloudfront.net/310519663701351808/9t6sWoci7JX6fK6AA4wSmM/illuminate-about-kpePWue6SZLGeNfDckHshB.webp"
+                src={MAIN_IMAGE}
                 alt="Illuminate students working through the college application process"
-                className="w-full h-full object-cover grayscale contrast-110 transition-transform duration-500 ease-out hover:scale-105"
+                className="w-full h-full object-cover transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-105"
+              />
+            </div>
+            <div
+              className="hidden lg:block absolute -bottom-8 -right-8 w-44 aspect-[4/3] rounded-lg overflow-hidden shadow-[var(--shadow-hover)] border-4 border-paper photo-duotone"
+              aria-hidden="true"
+            >
+              <img
+                src={ACCENT_IMAGE}
+                alt=""
+                className="w-full h-full object-cover transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-110"
               />
             </div>
             <p className="font-mono text-xs uppercase tracking-wide text-ink-soft mt-4">
@@ -41,7 +63,7 @@ export default function WhyIlluminate() {
             </p>
           </div>
 
-          <div>
+          <div ref={copy.ref} className={`reveal-up ${copy.visible ? "is-visible" : ""}`}>
             <p className="font-mono text-xs uppercase tracking-[0.15em] text-pen mb-4">
               Why Illuminate
             </p>
@@ -75,7 +97,7 @@ export default function WhyIlluminate() {
 
             <Link
               to="/about"
-              className="inline-flex items-center gap-2 mt-12 font-semibold text-ink border-b-2 border-pen hover:text-pen transition-colors"
+              className="press inline-flex items-center gap-2 mt-12 font-semibold text-ink border-b-2 border-pen hover:text-pen transition-colors"
             >
               Read our story <span aria-hidden="true">→</span>
             </Link>

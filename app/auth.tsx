@@ -108,6 +108,8 @@ type AuthAdapter = {
   getSession(): Promise<User | null>;
   signIn(email: string, password: string): Promise<AuthResult>;
   signUp(payload: SignupPayload): Promise<AuthResult>;
+  /** OAuth is a full-page redirect, so this only ever reports a pre-redirect failure. */
+  signInWithGoogle(): Promise<{ error?: string }>;
   signOut(): Promise<void>;
   requestReset(email: string): Promise<{ error?: string }>;
   updateProfile(current: User, patch: Partial<User>): Promise<AuthResult>;
@@ -159,6 +161,10 @@ const mockAdapter: AuthAdapter = {
     writeUsers([...users, { ...user, password: scramble(payload.password) }]);
     writeJSON(SESSION_KEY, user);
     return { user };
+  },
+
+  async signInWithGoogle(): Promise<{ error?: string }> {
+    return { error: "Google sign-in needs a connected Supabase project." };
   },
 
   async signOut(): Promise<void> {
@@ -267,6 +273,19 @@ const supabaseAdapter: AuthAdapter = {
     }
   },
 
+  async signInWithGoogle(): Promise<{ error?: string }> {
+    // Supabase navigates the browser to Google's consent screen on success,
+    // so there's no session to return here — onAuthStateChange picks it up
+    // once Google redirects back to this same URL.
+    const redirectTo = typeof window === "undefined" ? undefined : window.location.href;
+    const { error } = await getSupabase().auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo },
+    });
+    if (error) return { error: errorMessage(error, "Google sign-in didn't start.") };
+    return {};
+  },
+
   async signOut(): Promise<void> {
     await getSupabase().auth.signOut();
   },
@@ -361,6 +380,7 @@ type AuthContextValue = {
   setAuthMode: (mode: AuthMode) => void;
   login: (email: string, password: string) => Promise<AuthResult>;
   signup: (payload: SignupPayload) => Promise<AuthResult>;
+  loginWithGoogle: () => Promise<{ error?: string }>;
   logout: () => Promise<void>;
   requestPasswordReset: (email: string) => Promise<{ error?: string }>;
   updateProfile: (patch: Partial<User>) => Promise<AuthResult>;
@@ -406,7 +426,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!isSupabaseConfigured) return;
     const { data } = getSupabase().auth.onAuthStateChange((event) => {
-      if (event !== "SIGNED_OUT" && event !== "TOKEN_REFRESHED") return;
+      // SIGNED_IN also fires after Google redirects back here with a fresh
+      // session — that's what turns the OAuth round-trip into a logged-in UI.
+      if (event !== "SIGNED_OUT" && event !== "TOKEN_REFRESHED" && event !== "SIGNED_IN") return;
       authAdapter.getSession().then((restored) => {
         setUser(restored);
         setSavedResources(
@@ -448,6 +470,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     return result;
   }, []);
+
+  const loginWithGoogle = useCallback(() => authAdapter.signInWithGoogle(), []);
 
   const logout = useCallback(async () => {
     await authAdapter.signOut();
@@ -504,6 +528,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setAuthMode,
       login,
       signup,
+      loginWithGoogle,
       logout,
       requestPasswordReset,
       updateProfile,
@@ -521,6 +546,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       closeAuth,
       login,
       signup,
+      loginWithGoogle,
       logout,
       requestPasswordReset,
       updateProfile,
@@ -619,6 +645,72 @@ function PasswordInput({
       >
         {visible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
       </button>
+    </div>
+  );
+}
+
+function GoogleGlyph({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 48 48" className={className} aria-hidden="true">
+      <path
+        fill="#EA4335"
+        d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
+      />
+      <path
+        fill="#4285F4"
+        d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.9-2.26 5.36-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
+      />
+      <path
+        fill="#34A853"
+        d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
+      />
+    </svg>
+  );
+}
+
+/** "Continue with Google" — hidden entirely on the mock backend, which has
+    nothing to redirect to. */
+function GoogleSignInButton() {
+  const { loginWithGoogle } = useAuth();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  if (!isSupabaseConfigured) return null;
+
+  async function onClick() {
+    setError("");
+    setBusy(true);
+    const result = await loginWithGoogle();
+    // Success navigates the browser away, so only the failure path resumes here.
+    if (result.error) {
+      setError(result.error);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      {error && <FormError message={error} />}
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={busy}
+        className="w-full inline-flex items-center justify-center gap-2.5 px-5 py-3 bg-paper hover:bg-paper-dim disabled:opacity-60 disabled:cursor-not-allowed border border-rule text-ink font-semibold text-sm rounded-lg shadow-sm transition-colors"
+      >
+        {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <GoogleGlyph />}
+        Continue with Google
+      </button>
+      <div className="flex items-center gap-3">
+        <div className="flex-1 border-t border-rule" />
+        <span className="font-mono text-[0.65rem] uppercase tracking-wide text-ink-soft">
+          or
+        </span>
+        <div className="flex-1 border-t border-rule" />
+      </div>
     </div>
   );
 }
@@ -815,6 +907,7 @@ function LoginForm({ firstFieldRef }: { firstFieldRef: React.RefObject<HTMLInput
 
   return (
     <form onSubmit={onSubmit} className="space-y-4" noValidate>
+      <GoogleSignInButton />
       {error && <FormError message={error} />}
       <Field label="Email" htmlFor="login-email">
         <TextInput
@@ -871,6 +964,7 @@ function SignupForm({ firstFieldRef }: { firstFieldRef: React.RefObject<HTMLInpu
 
   return (
     <form onSubmit={onSubmit} className="space-y-4" noValidate>
+      <GoogleSignInButton />
       {error && <FormError message={error} />}
       <Field label="Full name" htmlFor="signup-name">
         <TextInput
